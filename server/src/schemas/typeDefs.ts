@@ -20,18 +20,16 @@ const typeDefs = `
     image: String
     link: String
   }
-    
+
   type Query {
     me: User
   }
 
   type Mutation {
-    addProfile(input: ProfileInput!): Auth
     login(email: String!, password: String!): Auth
-
-    addSkill(profileId: ID!, skill: String!): Profile
-    removeProfile: Profile
-    removeSkill(skill: String!): Profile
+    addUser(username: String!, email: String!, password: String!): Auth
+    saveBook(input: BookInput): User
+    removeBook(bookId: ID!): User
   }
 `;
 
