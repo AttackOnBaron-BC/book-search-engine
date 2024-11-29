@@ -1,131 +1,116 @@
-import { User } from '../models/index.js';
-import { signToken, AuthenticationError } from '../services/auth.js';
+import { User } from "../models/index.js";
+import { signToken, AuthenticationError } from "../services/auth.js";
 
+interface Book {
+  bookId: String;
+  authors: String[];
+  description: String;
+  title: String;
+  image: String;
+  link: String;
+}
+interface User {
+  _id: String;
+  username: String;
+  email: String;
+  password: String;
+  bookCount: Number;
+  savedBooks: [Book];
+}
 
-
-interface SaveBookArgs {
-  input: {
-    bookId: string;
-    authors: string[];
-    description: string;
-    title: string;
-    image?: string;
-    link?: string;
+interface AddUserArgs {
+  userInput: {
+    email: String;
+    username: String;
+    password: String;
+    savedBooks: [Book];
   };
 }
-
-interface UserInput {
-  username: string;
-  email: string;
-  password: string;
+interface AddBookArgs {
+  bookInput: {
+    authors: String[];
+    description: String;
+    title: String;
+    bookId: String;
+    image: String;
+    link: String;
+  };
+}
+interface RemoveBookArgs {
+  bookId: String;
 }
 
-interface LoginInput {
-  username?: string;
-  email?: string;
-  password: string;
+interface Context {
+  user?: User;
 }
 
 const resolvers = {
   Query: {
-    // Get a single user by username or the currently authenticated user
-    me: async (_parent: any, _args: any, context: { user?: { _id: string } }) => {
-      if (!context.user) {
-        throw new AuthenticationError('You need to be logged in!');
+    me: async (
+      _parent: unknown,
+      _args: unknown,
+      context: Context
+    ): Promise<User | null> => {
+      console.log(context.user); // debugging
+      if (context.user) {
+        return await User.findOne({ _id: context.user._id });
       }
-
-      const foundUser = await User.findOne({ _id: context.user._id });
-
-      if (foundUser) {
-        return foundUser;
-      }
-      else
-      {
-        throw new AuthenticationError('Cannot find a user with this id!');
-      }
-    },
-
-    // Get a single user by username
-    user: async (_parent: any, { username }: { username: string }) => {
-      const foundUser = await User.findOne({ username });
-
-      if (foundUser) {
-        return foundUser;
-      }
-
-      throw new AuthenticationError('Cannot find a user with this username!');
+      throw AuthenticationError;
     },
   },
-
   Mutation: {
-    // Create a new user
-    createUser: async (_parent: any, { input }: { input: UserInput }) => {
-      const user = await User.create(input);
-
-      if (!user) {
-        throw new AuthenticationError('Something went wrong!');
-      }
-
-      const token = signToken(user.username, user.password, user._id);
+    // add a new user
+    addUser: async (_parent: unknown, { userInput }: AddUserArgs) => {
+      const user = await User.create({ ...userInput });
+      const token = signToken(user.username, user.email, user._id);
       return { token, user };
     },
-
-    // Login user
-    login: async (_parent: any, { input }: { input: LoginInput }) => {
-      const user = await User.findOne({
-        $or: [{ username: input.username }, { email: input.email }],
-      });
-
+    // verify token on login
+    login: async (
+      _parent: unknown,
+      { email, password }: { email: string; password: string }
+    ) => {
+      const user = await User.findOne({ email });
       if (!user) {
-        throw new AuthenticationError("Can't find this user");
+        throw AuthenticationError;
       }
-
-      const correctPw = await user.isCorrectPassword(input.password);
-
-      if (!correctPw) {
-        throw new AuthenticationError('Wrong password!');
+      const correctPW = await user.isCorrectPassword(password);
+      if (!correctPW) {
+        throw AuthenticationError;
       }
+      const token = signToken(user.username, user.email, user._id);
 
-      const token = signToken(user.username, user.password, user._id);
       return { token, user };
     },
-
-    // Save a book to user's savedBooks
-    saveBook: async (_parent: any, { input }: SaveBookArgs, context: { user?: { _id: string } }) => {
-      if (!context.user) {
-        throw new AuthenticationError('You need to be logged in!');
-      }
-
-      try {
-        const updatedUser = await User.findOneAndUpdate(
+    // save  a book
+    saveBook: async (
+      _parent: unknown,
+      { bookInput }: AddBookArgs,
+      context: Context
+    ): Promise<User | null> => {
+      if (context.user) {
+        return await User.findOneAndUpdate(
           { _id: context.user._id },
-          { $addToSet: { savedBooks: input } },
+          { $addToSet: { savedBooks: { ...bookInput } } },
           { new: true, runValidators: true }
         );
-
-        return updatedUser;
-      } catch (err) {
-        throw new Error('Error saving book');
       }
+      throw AuthenticationError;
     },
-
-    // Remove a book from savedBooks
-    removeBook: async (_parent: any, { bookId }: { bookId: string }, context: { user?: { _id: string } }) => {
-      if (!context.user) {
-        throw new AuthenticationError('You need to be logged in!');
+    // remove a book
+    removeBook: async (
+      _parent: unknown,
+      { bookId }: RemoveBookArgs,
+      context: Context
+    ): Promise<User | null> => {
+      if (context.user) {
+        return await User.findByIdAndUpdate(
+          { _id: context.user._id },
+          { $pull: { savedBooks: { bookId: bookId } } },
+          { new: true }
+        );
       }
-
-      const updatedUser = await User.findOneAndUpdate(
-        { _id: context.user._id },
-        { $pull: { savedBooks: { bookId } } },
-        { new: true }
-      );
-
-      if (!updatedUser) {
-        throw new Error("Couldn't find user with this id!");
-      }
-
-      return updatedUser;
+      throw AuthenticationError;
     },
   },
 };
